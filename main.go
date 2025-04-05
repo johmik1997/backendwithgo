@@ -4,9 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	//"john/config"
 	db "john/database"
-	"john/handlers"
 	"john/middleware"
 	"john/schema"
 
@@ -18,21 +16,16 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// GraphQL endpoint with auth middleware for protected operations
 	mux.Handle("/graphql", middleware.AuthMiddleware(schema.GraphQLHandler()))
-	mux.HandleFunc("/login", handlers.LoginHandler)
-	//http.HandleFunc("/register", handlers.RegisterHandler)
-	// Set CORS headers
-	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Adjust as needed
-		w.Header().Set("Access-Control-Allow-Methods", "POST")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		// Call the RegisterHandler
-		handlers.RegisterHandler(w, r)
-	})
+	
+
+	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
 
+	// CORS configuration
 	handler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},

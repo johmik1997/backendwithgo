@@ -9,19 +9,19 @@ type EmpDetails struct {
 }
 
 func GetAllEmpDetails() ([]EmpDetails, error) {
-	rows, err := db.DB.Query(`SELECT emp_id, emp_title, address FROM employee_details`)
+	rows, err := db.DB.Query("SELECT emp_id, emp_title, address FROM employee_details")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []EmpDetails
+	var details []EmpDetails
 	for rows.Next() {
 		var d EmpDetails
 		if err := rows.Scan(&d.EmpId, &d.EmpTitle, &d.Address); err != nil {
 			return nil, err
 		}
-		list = append(list, d)
+		details = append(details, d)
 	}
-	return list, nil
+	return details, nil
 }

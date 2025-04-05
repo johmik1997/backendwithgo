@@ -3,30 +3,32 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"john/config"
+	"john/types"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/mitchellh/mapstructure"
-	"john/config"
-	"john/models"
 )
 
-func GenerateToken(user models.Employee) (string, error) {
+func GenerateToken(user types.Employee) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"username": user.Username,
-		"password": user.Password,
+		"id":       user.ID,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(),
 	})
 	return token.SignedString(config.JwtSecret)
 }
 
-func ValidateToken(tokenString string) (models.Employee, error) {
-	var emp models.Employee
+func ValidateToken(tokenString string) (types.Employee, error) {
+	var emp types.Employee
 	if tokenString == "" {
 		return emp, errors.New("authorization token required")
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("invalid method")
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return config.JwtSecret, nil
 	})
@@ -35,6 +37,12 @@ func ValidateToken(tokenString string) (models.Employee, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		if exp, ok := claims["exp"].(float64); ok {
+			if time.Now().Unix() > int64(exp) {
+				return emp, errors.New("token expired")
+			}
+		}
+
 		err := mapstructure.Decode(claims, &emp)
 		return emp, err
 	}

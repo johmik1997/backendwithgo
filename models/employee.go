@@ -1,22 +1,65 @@
 package models
 
 import (
+	"database/sql"
+	"errors"
 	db "john/database"
+	"john/security"
+	"john/types"
+	"log"
 )
 
-type Employee struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+func CreateEmployee(username, password string) (*types.Employee, error) {
+	hashed, err := security.HashPassword(password)
+
+	if err != nil {
+		return nil, errors.New("failed to hash password")
+	}
+
+	var emp types.Employee
+	err = db.DB.QueryRow(
+		"INSERT INTO employees (username, password) VALUES ($1, $2) RETURNING id, username",
+		username, hashed,
+	).Scan(&emp.ID, &emp.Username)
+	
+	if err != nil {
+		return nil, err
+	}
+	return &emp, nil
 }
 
-func GetEmployeeByUsername(username string) (Employee, error) {
-	var e Employee
-	err := db.DB.QueryRow(`SELECT id, username, password FROM employees WHERE username=$1`, username).
-		Scan(&e.ID, &e.Username, &e.Password)
-	return e, err
+func GetEmployeeByUsername(username string) (*types.Employee, error) {
+	var emp types.Employee
+	err := db.DB.QueryRow(
+		"SELECT id, username, password FROM employees WHERE username = $1",
+		username,
+	).Scan(&emp.ID, &emp.Username, &emp.Password)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+	return &emp, nil
 }
-func CreateEmployee(user Employee) error {
-    _, err := db.DB.Exec("INSERT INTO employees (username, password) VALUES ($1, $2)", user.Username, user.Password)
-    return err
+
+func VerifyEmployeeCredentials(username, password string) (*types.Employee, error) {
+    log.Printf("Verifying credentials for: %s", username)
+    
+    emp, err := GetEmployeeByUsername(username)
+    if err != nil {
+        log.Printf("User not found: %v", err)
+        return nil, err
+    }
+
+    log.Printf("Stored hash: %s", emp.Password)
+    log.Printf("Input password: %s", password)
+    
+    if !security.CheckPasswordHash(password, emp.Password) {
+        log.Printf("Password mismatch for user %s", username)
+        return nil, errors.New("invalid credentials")
+    }
+
+    return emp, nil
 }
