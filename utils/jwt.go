@@ -15,12 +15,14 @@ func GenerateToken(user types.Employee) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"username": user.Username,
 		"id":       user.ID,
+		"admin":    user.IsAdmin, 
 		"exp":      time.Now().Add(time.Hour * 24).Unix(),
 	})
 	return token.SignedString(config.JwtSecret)
 }
 
 func ValidateToken(tokenString string) (types.Employee, error) {
+	
 	var emp types.Employee
 	if tokenString == "" {
 		return emp, errors.New("authorization token required")

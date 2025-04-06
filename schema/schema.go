@@ -18,6 +18,8 @@ var accountType = graphql.NewObject(graphql.ObjectConfig{
 		"id":       &graphql.Field{Type: graphql.Int},
 		"username": &graphql.Field{Type: graphql.String},
 		"password": &graphql.Field{Type: graphql.String},
+		"isadmin":  &graphql.Field{Type: graphql.Boolean},
+		"createdat": &graphql.Field{Type: graphql.String},
 	},
 })
 

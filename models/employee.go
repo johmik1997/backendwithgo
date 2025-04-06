@@ -31,9 +31,10 @@ func CreateEmployee(username, password string) (*types.Employee, error) {
 func GetEmployeeByUsername(username string) (*types.Employee, error) {
 	var emp types.Employee
 	err := db.DB.QueryRow(
-		"SELECT id, username, password FROM employees WHERE username = $1",
+		"SELECT id, username, password, admin, created_at FROM employees WHERE username = $1",
 		username,
-	).Scan(&emp.ID, &emp.Username, &emp.Password)
+	).Scan(&emp.ID, &emp.Username, &emp.Password, &emp.IsAdmin, &emp.CreatedAt)
+	
 	
 	if err != nil {
 		if err == sql.ErrNoRows {
