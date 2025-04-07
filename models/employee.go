@@ -10,32 +10,29 @@ import (
 )
 
 func CreateEmployee(username, password string) (*types.Employee, error) {
-	hashed, err := security.HashPassword(password)
+    hashed, err := security.HashPassword(password)
+    if err != nil {
+        return nil, errors.New("failed to hash password")
+    }
 
-	if err != nil {
-		return nil, errors.New("failed to hash password")
-	}
-
-	var emp types.Employee
-	err = db.DB.QueryRow(
-		"INSERT INTO employees (username, password) VALUES ($1, $2) RETURNING id, username",
-		username, hashed,
-	).Scan(&emp.ID, &emp.Username)
-	
-	if err != nil {
-		return nil, err
-	}
-	return &emp, nil
+    var emp types.Employee
+    err = db.DB.QueryRow(
+        "INSERT INTO employees (username, password, is_admin) VALUES ($1, $2, $3) RETURNING id, username, is_admin",
+        username, hashed, false, // Default to non-admin for new users
+    ).Scan(&emp.ID, &emp.Username, &emp.IsAdmin)
+    
+    if err != nil {
+        return nil, err
+    }
+    return &emp, nil
 }
 
 func GetEmployeeByUsername(username string) (*types.Employee, error) {
-	var emp types.Employee
-	err := db.DB.QueryRow(
-		"SELECT id, username, password, admin, created_at FROM employees WHERE username = $1",
-		username,
-	).Scan(&emp.ID, &emp.Username, &emp.Password, &emp.IsAdmin, &emp.CreatedAt)
-	
-	
+    var emp types.Employee
+    err := db.DB.QueryRow(
+        "SELECT id, username, password, is_admin, created_at FROM employees WHERE username = $1",
+        username,
+    ).Scan(&emp.ID, &emp.Username, &emp.Password, &emp.IsAdmin, &emp.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("user not found")

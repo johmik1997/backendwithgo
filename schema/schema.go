@@ -8,42 +8,41 @@ import (
 	"john/utils"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/graphql-go/graphql"
 )
 
 var accountType = graphql.NewObject(graphql.ObjectConfig{
-	Name: "Account",
-	Fields: graphql.Fields{
-		"id":       &graphql.Field{Type: graphql.Int},
-		"username": &graphql.Field{Type: graphql.String},
-		"password": &graphql.Field{Type: graphql.String},
-		"isadmin":  &graphql.Field{Type: graphql.Boolean},
-		"createdat": &graphql.Field{Type: graphql.String},
-	},
-})
-
-var empType = graphql.NewObject(graphql.ObjectConfig{
-	Name: "EmpDetails",
-	Fields: graphql.Fields{
-		"emp_id":    &graphql.Field{Type: graphql.String},
-		"emp_title": &graphql.Field{Type: graphql.String},
-		"address": &graphql.Field{
-			Type: graphql.String,
-			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-				token, ok := p.Context.Value("token").(string)
-				if !ok || token == "" {
-					return nil, errors.New("authorization required")
-				}
-				_, err := utils.ValidateToken(token)
-				if err != nil {
-					return nil, err
-				}
-				return p.Source.(models.EmpDetails).Address, nil
-			},
+		Name: "Account",
+		Fields: graphql.Fields{
+			"id":        &graphql.Field{Type: graphql.Int},
+			"username":  &graphql.Field{Type: graphql.String},
+			"isAdmin":   &graphql.Field{Type: graphql.Boolean},  // Changed to match
+			"createdAt": &graphql.Field{Type: graphql.DateTime},
 		},
-	},
-})
+	})
+
+
+	var empType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "EmpDetails",
+		Fields: graphql.Fields{
+			"id":          &graphql.Field{Type: graphql.Int},
+			"empId":       &graphql.Field{Type: graphql.Int},
+			"empName":     &graphql.Field{Type: graphql.String}, // Changed from emp_name to empName
+			"department":  &graphql.Field{Type: graphql.String},
+			"experience":  &graphql.Field{Type: graphql.Int},
+			"address":     &graphql.Field{Type: graphql.String},
+			"birthdate":   &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					emp := p.Source.(models.EmpDetails)
+					return emp.Birthdate.Format("2006-01-02"), nil
+				},
+			},
+			"employePhoto": &graphql.Field{Type: graphql.String},
+		},
+	})
 
 func GraphQLHandler() http.Handler {
 	// Create root mutation first
@@ -58,6 +57,7 @@ func GraphQLHandler() http.Handler {
 				},
 	
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					
 					username := p.Args["username"].(string)
 					password := p.Args["password"].(string)
 				
@@ -89,10 +89,68 @@ func GraphQLHandler() http.Handler {
 					return models.CreateEmployee(username, password)
 				},
 			},
-		},
-	})
+			"addEmployee": &graphql.Field{
+    Type: empType,
+    Args: graphql.FieldConfigArgument{
+        "empName":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "department":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "experience":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+        "address":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "birthdate":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "employePhoto": &graphql.ArgumentConfig{Type: graphql.String},
+    },
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        // Get current user from context
+        token, ok := p.Context.Value("token").(string)
+        if !ok {
+            return nil, errors.New("authentication required")
+        }
+        
+        currentUser, err := utils.ValidateToken(token)
+        if err != nil {
+            return nil, fmt.Errorf("invalid token: %v", err)
+        }
 
-	// Create root query
+        // Parse input
+        empName := p.Args["empName"].(string)
+        department := p.Args["department"].(string)
+        experience := p.Args["experience"].(int)
+        address := p.Args["address"].(string)
+        birthdateStr := p.Args["birthdate"].(string)
+        
+        birthdate, err := time.Parse("2006-01-02", birthdateStr)
+        if err != nil {
+            return nil, fmt.Errorf("invalid birthdate format: %v", err)
+        }
+		
+        // Create employee details
+        newEmp := models.EmpDetails{
+            EmpID:        currentUser.ID, // Use logged-in user's ID
+            EmpName:      empName,
+            Department:   department,
+            Experience:   experience,
+            Address:      address,
+            Birthdate:    birthdate,
+			EmployePhoto: func() string {
+				if val, ok := p.Args["employePhoto"]; ok {
+					return val.(string)
+				}
+				return ""
+			}(),
+			
+        }
+
+        // Save to database
+        if err := models.AddEmployee(&newEmp); err != nil {
+            return nil, fmt.Errorf("failed to add employee: %v", err)
+        }
+
+        return newEmp, nil
+    },
+},
+
+},
+	})
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
@@ -110,20 +168,24 @@ func GraphQLHandler() http.Handler {
 					return models.GetEmployeeByUsername(emp.Username)
 				},
 			},
-			"employeeDetails": &graphql.Field{
-				Type: graphql.NewList(empType),
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					token, ok := p.Context.Value("token").(string)
-					if !ok || token == "" {
-						return nil, errors.New("authorization required")
-					}
-					_, err := utils.ValidateToken(token)
-					if err != nil {
-						return nil, err
-					}
-					return models.GetAllEmpDetails()
-				},
+			
+		"employeeDetails": &graphql.Field{
+			Type: graphql.NewList(empType),
+			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+				// Verify authentication
+				token, ok := p.Context.Value("token").(string)
+				if !ok {
+					return nil, errors.New("authentication required")
+				}
+				
+				if _, err := utils.ValidateToken(token); err != nil {
+					return nil, err
+				}
+				
+				return models.GetAllEmpDetails()
 			},
+		},
+			
 		},
 	})
 
