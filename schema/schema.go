@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,21 @@ var accountType = graphql.NewObject(graphql.ObjectConfig{
 			"createdAt": &graphql.Field{Type: graphql.DateTime},
 		},
 	})
-
+	var employeeType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Employee",
+		Fields: graphql.Fields{
+			"id":          &graphql.Field{Type: graphql.Int},
+			"empId":       &graphql.Field{Type: graphql.Int},
+			"empName":     &graphql.Field{Type: graphql.String},
+			"department":  &graphql.Field{Type: graphql.String},
+			"experience":  &graphql.Field{Type: graphql.Int},
+			"address":     &graphql.Field{Type: graphql.String},
+			"birthdate":   &graphql.Field{Type: graphql.String},
+			"employePhoto": &graphql.Field{Type: graphql.String},
+			"createdAt":   &graphql.Field{Type: graphql.String},
+		},
+	})
+	
 
 	var empType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "EmpDetails",
@@ -43,6 +58,33 @@ var accountType = graphql.NewObject(graphql.ObjectConfig{
 			"employePhoto": &graphql.Field{Type: graphql.String},
 		},
 	})
+	var participantType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Participant",
+		Fields: graphql.Fields{
+			"id":    &graphql.Field{Type: graphql.Int},
+			"name":  &graphql.Field{Type: graphql.String},
+			"class": &graphql.Field{Type: graphql.String},
+		},
+	})
+	
+var eventType = graphql.NewObject(graphql.ObjectConfig{
+    Name: "Event",
+    Fields: graphql.Fields{
+        "id":          &graphql.Field{Type: graphql.Int},
+        "name":        &graphql.Field{Type: graphql.String},
+        "date":        &graphql.Field{Type: graphql.DateTime},
+        "location":    &graphql.Field{Type: graphql.String},
+        "host":        &graphql.Field{Type: graphql.String},
+        "description": &graphql.Field{Type: graphql.String},
+        "participants": &graphql.Field{
+            Type: graphql.NewList(participantType),
+            Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                event := p.Source.(models.Event)
+                return event.Participants, nil
+            },
+        },
+    },
+})
 
 func GraphQLHandler() http.Handler {
 	// Create root mutation first
@@ -122,7 +164,7 @@ func GraphQLHandler() http.Handler {
         if err != nil {
             return nil, fmt.Errorf("invalid birthdate format: %v", err)
         }
-		
+
         // Create employee details
         newEmp := models.EmpDetails{
             EmpID:        currentUser.ID, // Use logged-in user's ID
@@ -131,13 +173,7 @@ func GraphQLHandler() http.Handler {
             Experience:   experience,
             Address:      address,
             Birthdate:    birthdate,
-			EmployePhoto: func() string {
-				if val, ok := p.Args["employePhoto"]; ok {
-					return val.(string)
-				}
-				return ""
-			}(),
-			
+            EmployePhoto: p.Args["employePhoto"].(string),
         }
 
         // Save to database
@@ -168,23 +204,47 @@ func GraphQLHandler() http.Handler {
 					return models.GetEmployeeByUsername(emp.Username)
 				},
 			},
+			"upcomingEvents": &graphql.Field{
+    Type: graphql.NewList(eventType),
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        return models.GetUpcomingEvents()
+    },
+},
+"teamMembers": &graphql.Field{
+    Type: graphql.NewList(employeeType),
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        token, ok := p.Context.Value("token").(string)
+        if !ok || token == "" {
+            return nil, errors.New("authorization required")
+        }
+        
+        if _, err := utils.ValidateToken(token); err != nil {
+            return nil, errors.New("invalid token")
+        }
+        
+        members, err := models.GetAllTeamMembers()
+        if err != nil {
+            log.Printf("Database error fetching team members: %v", err)
+            return nil, errors.New("could not retrieve team members")
+        }
+        return members, nil
+    },
+},
 			
-		"employeeDetails": &graphql.Field{
-			Type: graphql.NewList(empType),
-			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-				// Verify authentication
-				token, ok := p.Context.Value("token").(string)
-				if !ok {
-					return nil, errors.New("authentication required")
-				}
-				
-				if _, err := utils.ValidateToken(token); err != nil {
-					return nil, err
-				}
-				
-				return models.GetAllEmpDetails()
-			},
-		},
+	"employeeDetails": &graphql.Field{
+	Type: graphql.NewList(empType),
+	Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+		// Get user from context
+		user, ok := p.Context.Value("user").(*utils.Claims)
+		if !ok {
+			log.Println("No user found in context")
+			return nil, errors.New("authentication required")
+		}
+
+		log.Printf("Fetching employee details for user %s", user.Username)
+		return models.GetAllEmpDetails()
+	},
+},
 			
 		},
 	})
@@ -209,36 +269,50 @@ func GraphQLHandler() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Reject non-POST requests
+		if r.Method != "POST" {
+			http.Error(w, "GraphQL only supports POST requests", http.StatusMethodNotAllowed)
+			return
+		}
+
 		var reqBody struct {
 			Query     string                 `json:"query"`
 			Variables map[string]interface{} `json:"variables"`
 		}
 
-		// Parse request body
+		// Parse request with better error handling
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			log.Printf("Bad request: %v", err)
+			http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
 			return
 		}
 
-		log.Printf("Received GraphQL query: %s", reqBody.Query)
+		log.Printf("GraphQL Query: %s", reqBody.Query)
+		if reqBody.Variables != nil {
+			log.Printf("Variables: %v", reqBody.Variables)
+		}
 
-		// Execute GraphQL query
+		// Execute with timeout context
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
 
-
-		
 		result := graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  reqBody.Query,
 			VariableValues: reqBody.Variables,
-			Context:        r.Context(),
+			Context:        ctx,
 		})
 
+		// Enhanced error handling
 		if len(result.Errors) > 0 {
-			log.Printf("GraphQL errors: %v", result.Errors)
+			log.Printf("GraphQL errors: %+v", result.Errors)
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			log.Printf("Error encoding response: %v", err)
+		}
 	})
 }

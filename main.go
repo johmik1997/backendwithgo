@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	db "john/database"
 	"john/middleware"
@@ -16,23 +17,41 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// GraphQL endpoint with auth middleware for protected operations
+	// GraphQL endpoint
 	mux.Handle("/graphql", middleware.AuthMiddleware(schema.GraphQLHandler()))
-	
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
 	})
 
-	// CORS configuration
-	handler := cors.New(cors.Options{
+	// Enhanced CORS configuration
+	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "HEAD"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,
-	}).Handler(middleware.LoggingMiddleware(mux))
+		MaxAge:           86400,
+		Debug:            true, // Enable for development
+	})
+
+	// Chain middleware with proper ordering
+	handler := corsHandler.Handler(
+		middleware.LoggingMiddleware(
+			middleware.RecoveryMiddleware(mux),
+		),
+	)
+
+	// Configure server with timeouts
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      handler,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 
 	log.Println("Server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handler))
+	log.Fatal(server.ListenAndServe())
 }

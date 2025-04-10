@@ -48,36 +48,33 @@ import (
 		return tx.Commit()
 	}
 	func GetAllEmpDetails() ([]EmpDetails, error) {
-		rows, err := db.DB.Query(`
-			SELECT id, emp_id AS empId, 
-				   emp_name AS empName,  <!-- Using SQL aliases -->
-				   department, experience, 
-				   address, birthdate, employePhoto 
-			FROM employee_details
-		`)
-		// ... rest of the function
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-	
-		var employees []EmpDetails
-		for rows.Next() {
-			var emp EmpDetails
-			err := rows.Scan(
-				&emp.ID,
-				&emp.EmpID,
-				&emp.EmpName,
-				&emp.Department,
-				&emp.Experience,
-				&emp.Address,
-				&emp.Birthdate,
-				&emp.EmployePhoto,
-			)
-			if err != nil {
-				return nil, err
-			}
-			employees = append(employees, emp)
-		}
-		return employees, nil
-	}
+        rows, err := db.DB.Query(`
+            SELECT id, emp_id, emp_name, department, 
+                   experience, address, birthdate, employephoto 
+            FROM employee_details
+        `)
+        if err != nil {
+            return nil, err
+        }
+        defer rows.Close()
+    
+        var employees []EmpDetails
+        for rows.Next() {
+            var emp EmpDetails
+            err := rows.Scan(
+                &emp.ID,
+                &emp.EmpID,
+                &emp.EmpName,
+                &emp.Department,
+                &emp.Experience,
+                &emp.Address,
+                &emp.Birthdate,
+                &emp.EmployePhoto,
+            )
+            if err != nil {
+                return nil, err
+            }
+            employees = append(employees, emp)
+        }
+        return employees, nil
+    }
