@@ -37,7 +37,21 @@ var accountType = graphql.NewObject(graphql.ObjectConfig{
 			"createdAt":   &graphql.Field{Type: graphql.String},
 		},
 	})
-	
+// 	var teamMemberType = graphql.NewObject(graphql.ObjectConfig{
+//     Name: "TeamMember",
+//     Fields: graphql.Fields{
+//         "id":          &graphql.Field{Type: graphql.Int},
+//         "empId":       &graphql.Field{Type: graphql.Int},
+//         "empName":     &graphql.Field{Type: graphql.String},
+//         "department":  &graphql.Field{Type: graphql.String},
+//         "experience":  &graphql.Field{Type: graphql.Int},
+//         "address":     &graphql.Field{Type: graphql.String},
+//         "birthdate":   &graphql.Field{Type: graphql.String},
+//         "employePhoto": &graphql.Field{Type: graphql.String},
+//         "createdAt":   &graphql.Field{Type: graphql.String},
+//     },
+// })
+
 
 	var empType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "EmpDetails",
@@ -236,27 +250,24 @@ return map[string]interface{}{
         return models.GetUpcomingEvents()
     },
 },
-"teamMembers": &graphql.Field{
-    Type: graphql.NewList(employeeType),
-    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-        token, ok := p.Context.Value("token").(string)
-        if !ok || token == "" {
-            return nil, errors.New("authorization required")
-        }
+
+// Update the teamMembers field in rootQuery
+// "teamMembers": &graphql.Field{
+//     Type: graphql.NewList(teamMemberType),
+//     Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+//         _, ok := p.Context.Value("user").(*utils.Claims)
+//         if !ok {
+//             return nil, errors.New("authentication required")
+//         }
         
-        if _, err := utils.ValidateToken(token); err != nil {
-            return nil, errors.New("invalid token")
-        }
-        
-        members, err := models.GetAllTeamMembers()
-        if err != nil {
-            log.Printf("Database error fetching team members: %v", err)
-            return nil, errors.New("could not retrieve team members")
-        }
-        return members, nil
-    },
-},
-			
+//         members, err := models.GetAllTeamMembers()
+//         if err != nil {
+//             log.Printf("Database error fetching team members: %v", err)
+//             return nil, errors.New("could not retrieve team members")
+//         }
+//         return members, nil
+//     },
+// },		
 	"employeeDetails": &graphql.Field{
 	Type: graphql.NewList(empType),
 	Resolve: func(p graphql.ResolveParams) (interface{}, error) {
