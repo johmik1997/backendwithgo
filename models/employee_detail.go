@@ -2,11 +2,22 @@ package models
 
 import (
 	"fmt"
-	"time"
 	db "john/database"
+	"time"
 )
 
 type EmpDetails struct {
+	ID          int       `json:"id" db:"id"`
+	EmpID       int       `json:"empId" db:"emp_id"`
+	EmpName     string    `json:"empName" db:"emp_name"`
+	Department  string    `json:"department" db:"department"`
+	Experience  int       `json:"experience" db:"experience"`
+	Address     string    `json:"address" db:"address"`
+	Birthdate   time.Time `json:"birthdate" db:"birthdate"`
+	EmployePhoto string   `json:"employePhoto" db:"employee_photo"`
+	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
+}
+type EmpUpdateDetails struct {
 	ID          int       `json:"id" db:"id"`
 	EmpID       int       `json:"empId" db:"emp_id"`
 	EmpName     string    `json:"empName" db:"emp_name"`
@@ -105,4 +116,56 @@ func GetAllEmpDetails() ([]EmpDetails, error) {
 	}
 
 	return employees, nil
+}
+
+
+func UpdateEmployee(emp *EmpUpdateDetails) error {
+	query := `
+		UPDATE employee_details
+		SET emp_name = $1,
+			department = $2,
+			experience = $3,
+			address = $4,
+			birthdate = $5,
+			employee_photo = $6
+		WHERE id = $7
+	`
+
+	_, err := db.DB.Exec(
+		query,
+		emp.EmpName,
+		emp.Department,
+		emp.Experience,
+		emp.Address,
+		emp.Birthdate,
+		emp.EmployePhoto,
+		emp.ID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("could not update employee: %v", err)
+	}
+
+	return nil
+}
+func DeleteEmployee(id int) error {
+    result, err := db.DB.Exec("DELETE FROM employee_details WHERE id = $1", id)
+    if err != nil {
+        return fmt.Errorf("database error: %v", err)
+    }
+    
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("could not verify deletion: %v", err)
+    }
+    
+    if rowsAffected == 0 {
+        return fmt.Errorf("no employee found with id %d", id)
+    }
+    
+    return nil
+}
+
+func CheckDBConnection() error {
+    return db.DB.Ping()
 }

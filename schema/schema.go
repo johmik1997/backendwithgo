@@ -9,6 +9,7 @@ import (
 	"john/utils"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/graphql-go/graphql"
@@ -228,6 +229,73 @@ return map[string]interface{}{
         return newEmp, nil
     },
 },
+"updateEmployee": &graphql.Field{
+				Type: empType,
+				Args: graphql.FieldConfigArgument{
+					"id":          &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"empName":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"department":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"experience":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"address":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"birthdate":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"employePhoto": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					birthdate, err := time.Parse("2006-01-02", p.Args["birthdate"].(string))
+					if err != nil {
+						return nil, fmt.Errorf("invalid birthdate format: %v", err)
+					}
+					
+
+					emp := models.EmpUpdateDetails{
+						ID:          p.Args["id"].(int),
+						EmpName:     p.Args["empName"].(string),
+						Department:  p.Args["department"].(string),
+						Experience:  p.Args["experience"].(int),
+						Address:     p.Args["address"].(string),
+						Birthdate:   birthdate,
+						EmployePhoto: p.Args["employePhoto"].(string),
+					}
+
+					if err := models.UpdateEmployee(&emp); err != nil {
+						return nil, fmt.Errorf("failed to update employee: %v", err)
+					}
+
+					return emp, nil
+				},
+			},
+		"deleteEmployee": &graphql.Field{
+    Type: graphql.Boolean,
+    Args: graphql.FieldConfigArgument{
+        "id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+    },
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        // Enhanced error handling
+        token, ok := p.Context.Value("token").(string)
+        if !ok {
+            return false, fmt.Errorf("missing authentication token")
+        }
+
+        claims, err := utils.ValidateToken(token)
+        if err != nil {
+            return false, fmt.Errorf("invalid token: %v", err)
+        }
+
+        log.Printf("User %d attempting to delete employee", claims.ID)
+
+        id, ok := p.Args["id"].(int)
+        if !ok {
+            return false, fmt.Errorf("invalid employee ID")
+        }
+
+        if err := models.DeleteEmployee(id); err != nil {
+            log.Printf("Delete failed: %v", err)
+            return false, fmt.Errorf("failed to delete employee: %v", err)
+        }
+
+        return true, nil
+    },
+},
 
 },
 	})
@@ -306,50 +374,53 @@ return map[string]interface{}{
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Reject non-POST requests
-		if r.Method != "POST" {
-			http.Error(w, "GraphQL only supports POST requests", http.StatusMethodNotAllowed)
-			return
-		}
+        w.Header().Set("Content-Type", "application/json")
 
-		var reqBody struct {
-			Query     string                 `json:"query"`
-			Variables map[string]interface{} `json:"variables"`
-		}
+        // Only accept POST requests
+        if r.Method != http.MethodPost {
+            http.Error(w, `{"errors":[{"message":"Only POST requests are supported"}]}`, http.StatusMethodNotAllowed)
+            return
+        }
 
-		// Parse request with better error handling
-		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			log.Printf("Bad request: %v", err)
-			http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
-			return
-		}
+        // Parse request body
+        var reqBody struct {
+            Query     string                 `json:"query"`
+            Variables map[string]interface{} `json:"variables"`
+            // Add OperationName field for complex queries
+            OperationName string            `json:"operationName"`
+        }
 
-		log.Printf("GraphQL Query: %s", reqBody.Query)
-		if reqBody.Variables != nil {
-			log.Printf("Variables: %v", reqBody.Variables)
-		}
+        if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+            http.Error(w, `{"errors":[{"message":"Invalid request body"}]}`, http.StatusBadRequest)
+            return
+        }
 
-		// Execute with timeout context
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
+        // Create context with timeout
+        ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+        defer cancel()
 
-		result := graphql.Do(graphql.Params{
-			Schema:         schema,
-			RequestString:  reqBody.Query,
-			VariableValues: reqBody.Variables,
-			Context:        ctx,
-		})
+        // Add authentication token to context if available
+        if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+            ctx = context.WithValue(ctx, "token", strings.TrimPrefix(authHeader, "Bearer "))
+        }
 
-		// Enhanced error handling
-		if len(result.Errors) > 0 {
-			log.Printf("GraphQL errors: %+v", result.Errors)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-		}
+        // Execute GraphQL operation
+        result := graphql.Do(graphql.Params{
+            Schema:         schema,
+            RequestString:  reqBody.Query,
+            VariableValues: reqBody.Variables,
+            OperationName:  reqBody.OperationName,
+            Context:        ctx,
+        })
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(result); err != nil {
-			log.Printf("Error encoding response: %v", err)
-		}
-	})
+        // Handle errors
+        if len(result.Errors) > 0 {
+            w.WriteHeader(http.StatusBadRequest)
+        }
+
+        // Return response
+        if err := json.NewEncoder(w).Encode(result); err != nil {
+            http.Error(w, `{"errors":[{"message":"Failed to encode response"}]}`, http.StatusInternalServerError)
+        }
+    })
 }
