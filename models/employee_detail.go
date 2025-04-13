@@ -149,23 +149,35 @@ func UpdateEmployee(emp *EmpUpdateDetails) error {
 	return nil
 }
 func DeleteEmployee(id int) error {
-    result, err := db.DB.Exec("DELETE FROM employee_details WHERE id = $1", id)
+    // Start transaction
+    tx, err := db.DB.Begin()
     if err != nil {
+        return fmt.Errorf("could not begin transaction: %v", err)
+    }
+
+    // Execute delete
+    res, err := tx.Exec("DELETE FROM employee_details WHERE id = $1", id)
+    if err != nil {
+        tx.Rollback()
         return fmt.Errorf("database error: %v", err)
     }
-    
-    rowsAffected, err := result.RowsAffected()
+
+    // Verify deletion
+    rowsAffected, err := res.RowsAffected()
     if err != nil {
+        tx.Rollback()
         return fmt.Errorf("could not verify deletion: %v", err)
     }
-    
+
     if rowsAffected == 0 {
+        tx.Rollback()
         return fmt.Errorf("no employee found with id %d", id)
     }
-    
-    return nil
-}
 
-func CheckDBConnection() error {
-    return db.DB.Ping()
+    // Commit transaction
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("commit failed: %v", err)
+    }
+
+    return nil
 }
