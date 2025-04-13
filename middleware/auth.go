@@ -1,20 +1,40 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"john/utils"
 	"log"
 	"net/http"
 	"strings"
-	"john/utils"
 )
-
+// auth_middleware.go
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for health checks and OPTIONS
+		// Skip auth for health checks, OPTIONS, and login mutation
 		if r.URL.Path == "/health" || r.Method == "OPTIONS" {
 			next.ServeHTTP(w, r)
 			return
+		}
+
+		// For GraphQL requests, check if it's a login mutation
+		if r.Method == "POST" && r.URL.Path == "/graphql" {
+			bodyBytes, _ := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			
+			var reqBody struct {
+				Query     string `json:"query"`
+				Operation string `json:"operationName"`
+			}
+			if err := json.Unmarshal(bodyBytes, &reqBody); err == nil {
+				if strings.Contains(strings.ToLower(reqBody.Query), "mutation") && 
+				   strings.Contains(strings.ToLower(reqBody.Query), "login") {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
 		}
 
 		authHeader := r.Header.Get("Authorization")
@@ -33,20 +53,16 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		claims, err := utils.ValidateToken(token)
 		if err != nil {
 			log.Printf("Token validation failed: %v", err)
-			respondWithError(w, "Invalid token", http.StatusUnauthorized)
+			respondWithError(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 
-		log.Printf("Authenticated user: %s (ID: %d)", claims.Username, claims.ID)
-		
 		// Add claims to context
 		ctx := context.WithValue(r.Context(), "user", claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func respondWithError(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+func respondWithError(w http.ResponseWriter, s string, i int) {
+	panic("unimplemented")
 }

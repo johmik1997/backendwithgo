@@ -85,41 +85,73 @@ var eventType = graphql.NewObject(graphql.ObjectConfig{
         },
     },
 })
+// schema.go
+var employeType = graphql.NewObject(graphql.ObjectConfig{
+    Name: "Employees",
+    Fields: graphql.Fields{
+        "id": &graphql.Field{Type: graphql.Int},
+        "username": &graphql.Field{Type: graphql.String},
+        "isAdmin": &graphql.Field{Type: graphql.Boolean},
+    },
+})
+
+var loginResponseType = graphql.NewObject(graphql.ObjectConfig{
+    Name: "LoginResponse",
+    Fields: graphql.Fields{
+        "token": &graphql.Field{Type: graphql.String},
+        "user": &graphql.Field{Type: employeType},
+    },
+})
+
+// In your mutation fields
+
 
 func GraphQLHandler() http.Handler {
 	// Create root mutation first
 	rootMutation := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Mutation",
 		Fields: graphql.Fields{
-			"login": &graphql.Field{
-				Type: graphql.String,
-				Args: graphql.FieldConfigArgument{
-					"username": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-					"password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-				},
-	
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					
+		"login": &graphql.Field{
+    Type: loginResponseType,
+    Args: graphql.FieldConfigArgument{
+        "username": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+    },
+	Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					username := p.Args["username"].(string)
 					password := p.Args["password"].(string)
-				
-					emp, err := models.VerifyEmployeeCredentials(username, password)
+
+					user, err := models.VerifyEmployeeCredentials(username, password)
 					if err != nil {
-						log.Printf("Login failed for %s: %v", username, err)
-						return nil, fmt.Errorf("login failed: %v", err) // More detailed error
-					}
-					
-					token, err := utils.GenerateToken(*emp)
-					if err != nil {
-						log.Printf("Token generation failed: %v", err)
-						return nil, errors.New("failed to generate token")
+						return nil, errors.New("invalid credentials")
 					}
 
-					log.Printf("Login successful for user: %s", username)
-					return token, nil
-				},
-			},
-			"register": &graphql.Field{
+					token, err := utils.GenerateToken(*user)
+					if err != nil {
+						return nil, errors.New("failed to generate token")
+					}
+					log.Printf("Login attempt for user: %s", username)
+
+log.Printf("Login attempt for: %s", username)
+log.Printf("Generated token: %s", token)
+log.Printf("Returning: %+v", map[string]interface{}{
+    "token": token,
+    "user": map[string]interface{}{
+        "id": user.ID,
+        "username": user.Username,
+        "isAdmin": user.IsAdmin,
+    },
+})
+return map[string]interface{}{
+	"token": token,
+	"user": map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"isAdmin":  user.IsAdmin,
+	},
+}, nil
+}},
+				"register": &graphql.Field{
 				Type: accountType,
 				Args: graphql.FieldConfigArgument{
 					"username": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
@@ -190,20 +222,16 @@ func GraphQLHandler() http.Handler {
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
-			"account": &graphql.Field{
-				Type: accountType,
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					token, ok := p.Context.Value("token").(string)
-					if !ok || token == "" {
-						return nil, errors.New("authorization required")
-					}
-					emp, err := utils.ValidateToken(token)
-					if err != nil {
-						return nil, err
-					}
-					return models.GetEmployeeByUsername(emp.Username)
-				},
-			},
+            "account": &graphql.Field{
+                Type: accountType,
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    claims, ok := p.Context.Value("user").(*utils.Claims)
+                    if !ok {
+                        return nil, errors.New("authentication required")
+                    }
+                    return models.GetEmployeeByUsername(claims.Username)
+                },
+            },
 			"upcomingEvents": &graphql.Field{
     Type: graphql.NewList(eventType),
     Resolve: func(p graphql.ResolveParams) (interface{}, error) {

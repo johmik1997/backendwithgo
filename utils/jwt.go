@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"john/config"
-	"time"
 	"john/types"
+	"time"
+
 	"github.com/dgrijalva/jwt-go"
 )
 
@@ -19,18 +20,17 @@ type Claims struct {
 
 func GenerateToken(user types.Employee) (string, error) {
 	claims := &Claims{
-		Username: user.Username,
-		ID:       user.ID,
-		IsAdmin:  user.IsAdmin,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Hour * 24).Unix(),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(config.JwtSecret)
+        Username: user.Username,
+        ID:       user.ID,
+        IsAdmin:  user.IsAdmin,
+        StandardClaims: jwt.StandardClaims{
+            ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+        },
+    }
+    
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(config.JwtSecret)
 }
-
 func ValidateToken(tokenString string) (*Claims, error) {
 	if tokenString == "" {
 		return nil, errors.New("authorization token required")

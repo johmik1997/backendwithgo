@@ -26,15 +26,16 @@ func main() {
 		w.Write([]byte(`{"status": "ok"}`))
 	})
 
-	// Enhanced CORS configuration
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
-		AllowCredentials: true,
-		MaxAge:           86400,
-		Debug:            true, // Enable for development
-	})
+	// main.go
+corsHandler := cors.New(cors.Options{
+    AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
+    AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+    AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
+    ExposedHeaders:   []string{"Content-Length"},
+    AllowCredentials: true,
+    MaxAge:           86400,
+    Debug:            false, // Disable in production
+})
 
 	// Chain middleware with proper ordering
 	handler := corsHandler.Handler(
