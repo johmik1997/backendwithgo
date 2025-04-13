@@ -163,7 +163,7 @@ return map[string]interface{}{
 					return models.CreateEmployee(username, password)
 				},
 			},
-			"addEmployee": &graphql.Field{
+"addEmployee": &graphql.Field{
     Type: empType,
     Args: graphql.FieldConfigArgument{
         "empName":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
@@ -175,14 +175,9 @@ return map[string]interface{}{
     },
     Resolve: func(p graphql.ResolveParams) (interface{}, error) {
         // Get current user from context
-        token, ok := p.Context.Value("token").(string)
+        claims, ok := p.Context.Value("user").(*utils.Claims)
         if !ok {
             return nil, errors.New("authentication required")
-        }
-        
-        currentUser, err := utils.ValidateToken(token)
-        if err != nil {
-            return nil, fmt.Errorf("invalid token: %v", err)
         }
 
         // Parse input
@@ -194,25 +189,28 @@ return map[string]interface{}{
         
         birthdate, err := time.Parse("2006-01-02", birthdateStr)
         if err != nil {
-            return nil, fmt.Errorf("invalid birthdate format: %v", err)
+            return nil, fmt.Errorf("invalid birthdate format (use YYYY-MM-DD): %v", err)
         }
 
         // Create employee details
         newEmp := models.EmpDetails{
-            EmpID:        currentUser.ID, // Use logged-in user's ID
-            EmpName:      empName,
-            Department:   department,
-            Experience:   experience,
-            Address:      address,
-            Birthdate:    birthdate,
+            EmpID:       claims.ID, // Use logged-in user's ID
+            EmpName:     empName,
+            Department:  department,
+            Experience:  experience,
+            Address:     address,
+            Birthdate:   birthdate,
             EmployePhoto: p.Args["employePhoto"].(string),
+            CreatedAt:   time.Now(),
         }
 
         // Save to database
         if err := models.AddEmployee(&newEmp); err != nil {
+            log.Printf("Failed to add employee: %v", err)
             return nil, fmt.Errorf("failed to add employee: %v", err)
         }
 
+        log.Printf("Successfully added employee: %+v", newEmp)
         return newEmp, nil
     },
 },

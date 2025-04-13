@@ -21,16 +21,17 @@ func seedDatabase() {
 
     // Create employee_details table with proper foreign key
     _, err = DB.Exec(`
-        CREATE TABLE IF NOT EXISTS employee_details (
-            id SERIAL PRIMARY KEY,
-            emp_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-            emp_name VARCHAR(100) NOT NULL,
-            department VARCHAR(100),
-            experience INT,
-            address TEXT,
-            birthdate DATE,
-            employePhoto TEXT
-        );
+      CREATE TABLE IF NOT EXISTS employee_details (
+    id SERIAL PRIMARY KEY,
+    emp_id INTEGER NOT NULL,
+    emp_name VARCHAR(100) NOT NULL,
+    department VARCHAR(100) NOT NULL,
+    experience INTEGER NOT NULL,
+    address TEXT NOT NULL,
+    birthdate DATE NOT NULL,
+    employee_photo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
     `)
     if err != nil {
         log.Fatal("Error creating employee_details table:", err)

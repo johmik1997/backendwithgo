@@ -28,7 +28,7 @@ func main() {
 
 	// main.go
 corsHandler := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
+    AllowedOrigins:   []string{"http://localhost:8082", "http://localhost:8081"},
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
     ExposedHeaders:   []string{"Content-Length"},
@@ -46,13 +46,13 @@ corsHandler := cors.New(cors.Options{
 
 	// Configure server with timeouts
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":8082",
 		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Println("Server running on :8080")
+	log.Println("Server running on :8082")
 	log.Fatal(server.ListenAndServe())
 }
