@@ -15,48 +15,46 @@ import (
 )
 
 func main() {
-	// Verify database connection before starting
+	// Verify database connection
 	if err := db.DB.Ping(); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
 	mux := http.NewServeMux()
+	mux.Handle("/graphql", schema.GraphQLHandler())// Remove AuthMiddleware from here
 
-	// GraphQL endpoint
-	mux.Handle("/graphql", middleware.AuthMiddleware(schema.GraphQLHandler()))
-
-	// Health check endpoint
+	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-			log.Printf("Failed to encode health check response: %v", err)
-		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
 	// CORS configuration
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "X-Requested-With"},
-		ExposedHeaders:   []string{"Content-Length", "Authorization"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
+		ExposedHeaders:   []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	})
 
-	// Chain middleware
+	// Chain middleware with AuthMiddleware first
 	handler := corsHandler.Handler(
-		middleware.LoggingMiddleware(
-			middleware.RecoveryMiddleware(mux),
-	),
+		middleware.AuthMiddleware(
+			middleware.LoggingMiddleware(
+				middleware.RecoveryMiddleware(mux),
+			),
+		),
 	)
-	// Get port from environment variable
+
+	// Server configuration
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8082"
 	}
 
-	// Configure server
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      handler,
