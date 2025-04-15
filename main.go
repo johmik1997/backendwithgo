@@ -32,7 +32,7 @@ func main() {
 
 	// CORS configuration
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081"},
+		AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "https://frontendvue-with-gobackend.onrender.com"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		ExposedHeaders:   []string{"Content-Length"},

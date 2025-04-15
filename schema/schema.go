@@ -302,16 +302,21 @@ return map[string]interface{}{
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
-			"account": &graphql.Field{
-				Type: accountType,
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					claims, ok := p.Context.Value("user").(*utils.Claims)
-					if !ok {
-						return nil, errors.New("authentication required")
-					}
-					return models.GetEmployeeByUsername(claims.Username)
-				},
-			},
+			// In your rootQuery definition
+"account": &graphql.Field{
+    Type: accountType,
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        claims, ok := p.Context.Value("user").(*utils.Claims)
+        if !ok {
+            return nil, errors.New("authentication required")
+        }
+        user, err := models.GetEmployeeByUsername(claims.Username)
+        if err != nil {
+            return nil, fmt.Errorf("failed to fetch user: %v", err)
+        }
+        return user, nil
+    },
+},
 			"employeeDetails": &graphql.Field{
 				Type: graphql.NewList(empType),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
