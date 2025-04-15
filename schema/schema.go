@@ -9,7 +9,6 @@ import (
 	"john/utils"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/graphql-go/graphql"
@@ -298,11 +297,10 @@ return map[string]interface{}{
 },
 
 },
-	})
+})
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
-			// Account query - good implementation
 			"account": &graphql.Field{
 				Type: accountType,
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
@@ -313,61 +311,25 @@ return map[string]interface{}{
 					return models.GetEmployeeByUsername(claims.Username)
 				},
 			},
-	
-			// Upcoming events query - improved with error handling
-			"upcomingEvents": &graphql.Field{
-				Type: graphql.NewList(eventType),
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					events, err := models.GetUpcomingEvents()
-					if err != nil {
-						log.Printf("Error fetching upcoming events: %v", err)
-						return nil, errors.New("failed to fetch events")
-					}
-					return events, nil
-				},
-			},
-	
-			// Employee details query - improved with pagination support
 			"employeeDetails": &graphql.Field{
 				Type: graphql.NewList(empType),
-				Args: graphql.FieldConfigArgument{
-					"limit": &graphql.ArgumentConfig{
-						Type:         graphql.Int,
-						DefaultValue: 10,
-					},
-					"offset": &graphql.ArgumentConfig{
-						Type:         graphql.Int,
-						DefaultValue: 0,
-					},
-				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					// Optional authentication - remove if you want public access
 					if _, ok := p.Context.Value("user").(*utils.Claims); !ok {
-						log.Println("Unauthorized access attempt to employeeDetails")
 						return nil, errors.New("authentication required")
 					}
-	
-					limit := p.Args["limit"].(int)
-					offset := p.Args["offset"].(int)
-	
-					log.Printf("Fetching employee details (limit: %d, offset: %d)", limit, offset)
-					return models.GetAllEmpDetails()
+					return models.GetAllEmpDetails() // Default pagination
 				},
 			},
-	
-			// Add a simple health check query
 			"health": &graphql.Field{
 				Type: graphql.String,
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					return "OK", nil
 				},
 			},
-	
-			// Add introspection query support
-			// "__schema" field removed as graphql-go does not support it directly
 		},
 	})
-	// Create schema with both query and mutation
+
+	// Create schema
 	schema, err := graphql.NewSchema(graphql.SchemaConfig{
 		Query:    rootQuery,
 		Mutation: rootMutation,
@@ -376,58 +338,31 @@ return map[string]interface{}{
 		log.Fatalf("Failed to create schema: %v", err)
 	}
 
-	// Debug: Print all available operations
-	log.Println("Available Queries:")
-	for name := range rootQuery.Fields() {
-		log.Println("-", name)
-	}
-	log.Println("Available Mutations:")
-	for name := range rootMutation.Fields() {
-		log.Println("-", name)
-	}
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-	
-		// Only accept POST requests
-		if r.Method != http.MethodPost && r.Method != http.MethodOptions {
-			http.Error(w, `{"errors":[{"message":"Only POST requests are supported"}]}`, http.StatusMethodNotAllowed)
-			return
-		}
-	
-		// Handle OPTIONS for preflight
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-	
-		// Parse request body
+
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"errors":[{"message":"Only POST requests are supported"}]}`, http.StatusMethodNotAllowed)
+			return
+		}
+
 		var reqBody struct {
 			Query         string                 `json:"query"`
 			Variables     map[string]interface{} `json:"variables"`
 			OperationName string                `json:"operationName"`
 		}
-	
+
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 			http.Error(w, `{"errors":[{"message":"Invalid request body"}]}`, http.StatusBadRequest)
 			return
 		}
-	
-		// Create context with timeout
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer cancel()
-	
-		// Add authentication token to context if available
-		if authHeader := r.Header.Get("Authorization"); authHeader != "" {
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			claims, err := utils.ValidateToken(tokenString)
-			if err == nil {
-				ctx = context.WithValue(ctx, "user", claims)
-			}
-			ctx = context.WithValue(ctx, "token", tokenString)
-		}
-	
-		// Execute GraphQL operation
+
+		ctx := context.WithValue(r.Context(), "token", r.Header.Get("Authorization"))
 		result := graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  reqBody.Query,
@@ -435,16 +370,14 @@ return map[string]interface{}{
 			OperationName:  reqBody.OperationName,
 			Context:        ctx,
 		})
-	
-		// Handle errors
+
 		if len(result.Errors) > 0 {
 			log.Printf("GraphQL errors: %v", result.Errors)
-			w.WriteHeader(http.StatusOK) // GraphQL returns 200 even for errors
 		}
-	
-		// Return response
+
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			log.Printf("Failed to encode response: %v", err)
 			http.Error(w, `{"errors":[{"message":"Failed to encode response"}]}`, http.StatusInternalServerError)
 		}
-	})}
+	})
+}

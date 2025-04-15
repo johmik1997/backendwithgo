@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
-"encoding/json"
+
 	db "john/database"
 	"john/middleware"
 	"john/schema"
@@ -13,6 +15,10 @@ import (
 )
 
 func main() {
+	// Verify database connection before starting
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
 	defer db.Close()
 
 	mux := http.NewServeMux()
@@ -28,7 +34,7 @@ func main() {
 		}
 	})
 
-	// main.go
+	// CORS configuration
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
@@ -37,22 +43,28 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           86400,
 	})
-	// Chain middleware with proper ordering
+
+	// Chain middleware
 	handler := corsHandler.Handler(
 		middleware.LoggingMiddleware(
 			middleware.RecoveryMiddleware(mux),
-		),
 	)
 
-	// Configure server with timeouts
+	// Get port from environment variable
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082"
+	}
+
+	// Configure server
 	server := &http.Server{
-		Addr:         ":8082",
+		Addr:         ":" + port,
 		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Println("Server running on :8082")
+	log.Printf("Server running on :%s", port)
 	log.Fatal(server.ListenAndServe())
 }
