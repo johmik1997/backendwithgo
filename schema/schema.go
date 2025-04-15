@@ -332,6 +332,12 @@ return map[string]interface{}{
 					return "OK", nil
 				},
 			},
+			"upcomingEvents": &graphql.Field{
+				Type: graphql.NewList(eventType),
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return models.GetUpcomingEvents()
+				},
+			},
 		},
 	})
 
