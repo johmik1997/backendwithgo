@@ -2,9 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
-"fmt"
+
 	_ "github.com/lib/pq"
 )
 
@@ -12,7 +13,7 @@ var DB *sql.DB
 
 func init() {
 	// First try full connection string (for Render)
-	connStr := os.Getenv("DATABASE_URL")
+	connStr := os.Getenv("DB_URL")
 	if connStr == "" {
 		connStr = fmt.Sprintf(
 			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
