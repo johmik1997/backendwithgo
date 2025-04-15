@@ -9,6 +9,7 @@ import (
 	"john/utils"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/graphql-go/graphql"
@@ -338,31 +339,53 @@ return map[string]interface{}{
 		log.Fatalf("Failed to create schema: %v", err)
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	// Custom error handler
+	writeGraphQLError := func(w http.ResponseWriter, message string, statusCode int) {
+		w.WriteHeader(statusCode)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": message},
+			},
+		})
+	}
 
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeGraphQLError(w, "Only POST requests are supported", http.StatusMethodNotAllowed)
+	
+		// Handle OPTIONS first
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
+	
+		// Only accept POST requests
 		if r.Method != http.MethodPost {
-			http.Error(w, `{"errors":[{"message":"Only POST requests are supported"}]}`, http.StatusMethodNotAllowed)
+		writeGraphQLError(w, "Only POST requests are supported", http.StatusMethodNotAllowed)
 			return
 		}
-
+	
+		// Parse request body
 		var reqBody struct {
 			Query         string                 `json:"query"`
 			Variables     map[string]interface{} `json:"variables"`
 			OperationName string                `json:"operationName"`
 		}
-
+	
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			http.Error(w, `{"errors":[{"message":"Invalid request body"}]}`, http.StatusBadRequest)
+			writeGraphQLError(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
-
-		ctx := context.WithValue(r.Context(), "token", r.Header.Get("Authorization"))
+	
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+	
+		// Add token to context if available
+		if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+			ctx = context.WithValue(ctx, "token", strings.TrimPrefix(authHeader, "Bearer "))
+		}
+	
+		// Execute GraphQL operation
 		result := graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  reqBody.Query,
@@ -370,14 +393,10 @@ return map[string]interface{}{
 			OperationName:  reqBody.OperationName,
 			Context:        ctx,
 		})
-
-		if len(result.Errors) > 0 {
-			log.Printf("GraphQL errors: %v", result.Errors)
-		}
-
+	
+		// Return response
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			log.Printf("Failed to encode response: %v", err)
-			http.Error(w, `{"errors":[{"message":"Failed to encode response"}]}`, http.StatusInternalServerError)
+			writeGraphQLError(w, "Failed to encode response", http.StatusInternalServerError)
 		}
-	})
-}
+	})}

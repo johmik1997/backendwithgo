@@ -21,23 +21,24 @@ func respondWithError(w http.ResponseWriter, message string, statusCode int) {
         },
     })
 }
-
 func AuthMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Skip auth for health checks, OPTIONS, and introspection queries
+        // Skip auth for health checks and OPTIONS
         if r.URL.Path == "/health" || r.Method == "OPTIONS" {
             next.ServeHTTP(w, r)
             return
         }
 
-        // For GraphQL requests, check if it's an introspection query
+        // For GraphQL requests, parse the query first
         if r.Method == "POST" && r.URL.Path == "/graphql" {
+            // Read and restore the request body
             bodyBytes, _ := io.ReadAll(r.Body)
             r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
             
             var reqBody struct {
-                Query     string `json:"query"`
+                Query string `json:"query"`
             }
+            
             if err := json.Unmarshal(bodyBytes, &reqBody); err == nil {
                 // Allow introspection queries without auth
                 if strings.Contains(reqBody.Query, "__schema") || 
@@ -55,16 +56,16 @@ func AuthMiddleware(next http.Handler) http.Handler {
             }
         }
 
-        // Rest of your auth logic...
+        // Require auth for all other requests
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
-            respondWithError(w, "Authorization header required", http.StatusUnauthorized)
+            writeGraphQLError(w, "Authorization header required", http.StatusUnauthorized)
             return
         }
 
         tokenParts := strings.Split(authHeader, " ")
         if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-            respondWithError(w, "Invalid Authorization header format", http.StatusUnauthorized)
+            writeGraphQLError(w, "Invalid Authorization header format", http.StatusUnauthorized)
             return
         }
 
@@ -72,12 +73,27 @@ func AuthMiddleware(next http.Handler) http.Handler {
         claims, err := utils.ValidateToken(token)
         if err != nil {
             log.Printf("Token validation failed: %v", err)
-            respondWithError(w, "Invalid or expired token", http.StatusUnauthorized)
+            writeGraphQLError(w, "Invalid or expired token", http.StatusUnauthorized)
             return
         }
 
         // Add claims to context
         ctx := context.WithValue(r.Context(), "user", claims)
         next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+func writeGraphQLError(w http.ResponseWriter, message string, statusCode int) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(statusCode)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "errors": []map[string]interface{}{
+            {
+                "message": message,
+                "extensions": map[string]interface{}{
+                    "code": "UNAUTHENTICATED",
+                },
+            },
+        },
     })
 }
