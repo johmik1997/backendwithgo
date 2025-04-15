@@ -28,7 +28,7 @@ func main() {
 
 	// main.go
 corsHandler := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:8082", "http://localhost:8081" ,"*"},
+    AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081" ,"*"},
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
     ExposedHeaders:   []string{"Content-Length"},
