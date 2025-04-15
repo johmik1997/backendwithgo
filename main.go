@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"time"
-
+"encoding/json"
 	db "john/database"
 	"john/middleware"
 	"john/schema"
@@ -23,20 +23,20 @@ func main() {
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status": "ok"}`))
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+			log.Printf("Failed to encode health check response: %v", err)
+		}
 	})
 
 	// main.go
-corsHandler := cors.New(cors.Options{
-    AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081" ,"*"},
-    AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-    AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
-    ExposedHeaders:   []string{"Content-Length"},
-    AllowCredentials: true,
-    MaxAge:           86400,
-    Debug:            false, // Disable in production
-})
-
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"https://backendwithgo.onrender.com", "http://localhost:8081"},
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "X-Requested-With"},
+		ExposedHeaders:   []string{"Content-Length", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           86400,
+	})
 	// Chain middleware with proper ordering
 	handler := corsHandler.Handler(
 		middleware.LoggingMiddleware(
