@@ -166,18 +166,27 @@ return map[string]interface{}{
 	},
 }, nil
 }},
-				"register": &graphql.Field{
-				Type: accountType,
-				Args: graphql.FieldConfigArgument{
-					"username": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-					"password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-				},
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					username := p.Args["username"].(string)
-					password := p.Args["password"].(string)
-					return models.CreateEmployee(username, password)
-				},
-			},
+			"register": &graphql.Field{
+    Type: accountType,
+    Args: graphql.FieldConfigArgument{
+        "username": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+        "password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+    },
+    Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+        username := p.Args["username"].(string)
+        password := p.Args["password"].(string)
+        
+        // Add validation if needed
+        if len(username) < 3 {
+            return nil, errors.New("username must be at least 3 characters")
+        }
+        if len(password) < 6 {
+            return nil, errors.New("password must be at least 6 characters")
+        }
+        
+        return models.CreateEmployee(username, password)
+    },
+},
 "addEmployee": &graphql.Field{
     Type: empType,
     Args: graphql.FieldConfigArgument{
