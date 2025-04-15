@@ -16,7 +16,7 @@ import (
 
 func main() {
 	// Verify database connection before starting
-	if err := db.Ping(); err != nil {
+	if err := db.DB.Ping(); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
@@ -48,8 +48,8 @@ func main() {
 	handler := corsHandler.Handler(
 		middleware.LoggingMiddleware(
 			middleware.RecoveryMiddleware(mux),
+	),
 	)
-
 	// Get port from environment variable
 	port := os.Getenv("PORT")
 	if port == "" {
